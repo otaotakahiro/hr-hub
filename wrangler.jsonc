@@ -22,13 +22,13 @@
   "kv_namespaces": [
     {
       "binding": "KV",
-      "id": "203c2fef5679429096bb56346907a2df",
-      "preview_id": "203c2fef5679429096bb56346907a2df"
+      "id": "76e664e99c70490fa8274406a6a38df9",
+      "preview_id": "76e664e99c70490fa8274406a6a38df9"
     },
     {
       "binding": "COMPANY_KV",
-      "id": "d6ecf44e28324865b0cf78ef193271da",
-      "preview_id": "d6ecf44e28324865b0cf78ef193271da"
+      "id": "503002bfe7ba42d680b903668dea4fb0",
+      "preview_id": "503002bfe7ba42d680b903668dea4fb0"
     }
   ]
 }
