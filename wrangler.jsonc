@@ -4,7 +4,7 @@
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "hr-profiling",
+  "name": "hr-hub",
   "account_id": "f936ae74ccb3e57720edbdd06d1f0f13",
   "main": "./src/index.js",
   "compatibility_date": "2025-04-04",
