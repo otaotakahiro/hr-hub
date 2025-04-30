@@ -119,6 +119,9 @@
           <button id="results-tab" class="tab-button px-3 py-2 font-medium text-sm rounded-md text-gray-500 hover:text-blue-600 hover:border-b-2 hover:border-blue-300">
             <i class="fas fa-list mr-1"></i>分析結果一覧
           </button>
+          <button id="compatibility-tab" class="tab-button px-3 py-2 font-medium text-sm rounded-md text-gray-500 hover:text-blue-600 hover:border-b-2 hover:border-blue-300">
+            <i class="fas fa-users mr-1"></i>相性診断
+          </button>
         </nav>
       </div>
     </div>
@@ -126,7 +129,7 @@
 
     <!-- 分析フォーム タブコンテンツ -->
     <div id="form-content" class="tab-content active">
-      <form onsubmit="submitForm(event)" class="max-w-lg mx-auto pt-4">
+      <form id="analysisForm" class="max-w-lg mx-auto pt-4">
         <input type="hidden" name="pageId" value="__PAGE_ID__">
         <div class="mb-4 flex gap-4">
           <div class="w-1/2">
@@ -177,6 +180,59 @@
       </form>
     </div>
 
+    <!-- 相性診断タブコンテンツ -->
+    <div id="compatibility-content" class="tab-content hidden">
+      <div class="pt-4">
+        <h2 class="text-xl font-semibold mb-4">相性診断実行</h2>
+        <form id="compatibilityForm" class="space-y-4 mb-8">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div class="flex items-center space-x-2">
+                <label for="person1-search" class="w-20 text-sm font-medium text-gray-700 whitespace-nowrap flex-shrink-0">診断対象1：</label>
+                <div class="relative flex-grow">
+                  <input type="text" id="person1-search" autocomplete="off" placeholder="名前を入力して候補を選択..." class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                  <input type="hidden" id="person1-resultId" name="resultId1">
+                  <div id="person1-suggestions" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 shadow-lg hidden max-h-60 overflow-y-auto"></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <label for="person2-search" class="w-20 text-sm font-medium text-gray-700 whitespace-nowrap flex-shrink-0">診断対象2：</label>
+                <div class="relative flex-grow">
+                  <input type="text" id="person2-search" autocomplete="off" placeholder="名前を入力して候補を選択..." class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                  <input type="hidden" id="person2-resultId" name="resultId2">
+                  <div id="person2-suggestions" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 shadow-lg hidden max-h-60 overflow-y-auto"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="text-center">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-play mr-1"></i> 相性を診断する</button>
+          </div>
+        </form>
+        <div id="compatibility-message-area" class="mt-4 text-center"></div>
+
+        <hr class="my-6">
+
+        <h2 class="text-xl font-semibold mb-4">診断結果一覧</h2>
+        <div class="mb-4">
+          <label for="compatibility-filter-search" class="block text-sm font-medium text-gray-700">結果絞り込み (表示する人の関連結果)</label>
+          <div class="relative mt-1">
+            <input type="text" id="compatibility-filter-search" autocomplete="off" placeholder="名前を入力して候補を選択..." class="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+            <input type="hidden" id="compatibility-filter-resultId">
+            <div id="compatibility-filter-suggestions" class="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 shadow-lg hidden max-h-60 overflow-y-auto"></div>
+          </div>
+        </div>
+        <div id="compatibilityResultsList">
+          <p class="text-center text-gray-500 py-4">表示対象の診断結果はありません。</p>
+        </div>
+        <div class="text-right mt-4">
+          <button type="button" id="deleteCompatibilityButton" class="btn bg-red-600 hover:bg-red-700 text-white" disabled>選択した結果を削除</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -200,17 +256,20 @@
 
     async function submitForm(event) {
       event.preventDefault();
-      const submitButton = document.querySelector('button[type="submit"]');
+      const submitButton = document.querySelector('#analysisForm button[type="submit"]');
       const loadingOverlay = document.getElementById('loading-overlay');
 
       loadingOverlay.classList.remove('hidden');
-      submitButton.disabled = true;
+      if (submitButton) submitButton.disabled = true;
 
       try {
         const formData = new FormData(event.target);
+        const dataToSend = Object.fromEntries(formData);
+        console.log('Submitting to /api/results:', dataToSend);
+
         const response = await fetch('/api/results', {
           method: 'POST',
-          body: JSON.stringify(Object.fromEntries(formData)),
+          body: JSON.stringify(dataToSend),
           headers: {
             'Content-Type': 'application/json',
           },
@@ -225,14 +284,16 @@
           location.reload(); /* リロード実行 */
         } else {
           /* エラー時はポップアップ表示 (リロードしない) */
-          showToast('分析に失敗しました: ' + (result.error || `サーバーエラー(${response.status})`), 'error');
-          submitButton.disabled = false; /* エラー時はボタンを再度有効化 */
+          const serverErrorMessage = result.error || result.details || `サーバーエラー(${response.status})`;
+          console.error('Server returned error:', response.status, result);
+          showToast('分析に失敗しました: ' + serverErrorMessage, 'error');
+          if (submitButton) submitButton.disabled = false; /* エラー時はボタンを再度有効化 */
         }
       } catch (error) {
         console.error('Analysis submission error:', error);
         /* 通信エラー時もポップアップ表示 (リロードしない) */
         showToast('通信エラーが発生しました。', 'error');
-        submitButton.disabled = false; /* エラー時はボタンを再度有効化 */
+        if (submitButton) submitButton.disabled = false; /* エラー時はボタンを再度有効化 */
       } finally {
         /* ローディング解除はエラー時のみ必要 */
         /* If an error occurred, the submit button should be re-enabled here instead of in the catch blocks */
@@ -254,110 +315,376 @@
             history.replaceState(null, null, ' '); /* More robust way to clear hash without triggering navigation */
             /* location.hash = ''; // simpler alternative */
         }
-    });
 
-    const deleteForm = document.getElementById('deleteResultsForm');
-    const deleteButton = document.getElementById('deleteButton');
-    const resultsList = document.getElementById('resultsList');
-    const initialDeleteConfirmModal = document.getElementById('initial-delete-confirm-modal');
-    const initialDeleteMessage = document.getElementById('initial-delete-message');
-    const cancelInitialDeleteButton = document.getElementById('cancel-initial-delete-button');
-    const confirmInitialDeleteButton = document.getElementById('confirm-initial-delete-button');
-    const deleteConfirmModal = document.getElementById('delete-confirm-modal');
-    const cancelDeleteButton = document.getElementById('cancel-delete-button');
-    const finalDeleteButton = document.getElementById('final-delete-button');
-    const deleteConfirmInput = document.getElementById('delete-confirm-input');
-    let idsToDelete = [];
+        // --- タブ切り替え --- (相性診断タブを追加)
+        const tabs = ['form', 'results', 'compatibility'];
+        tabs.forEach(tabId => {
+            const button = document.getElementById(`${tabId}-tab`);
+            const content = document.getElementById(`${tabId}-content`);
+            if (button && content) {
+                button.addEventListener('click', () => {
+                    // すべてのタブボタンとコンテンツを非アクティブ化
+                    tabs.forEach(id => {
+                        document.getElementById(`${id}-tab`)?.classList.remove('active', 'text-blue-600', 'border-blue-500');
+                        document.getElementById(`${id}-tab`)?.classList.add('text-gray-500', 'hover:text-blue-600', 'hover:border-blue-300');
+                        document.getElementById(`${id}-content`)?.classList.add('hidden');
+                    });
+                    // クリックされたタブをアクティブ化
+                    button.classList.add('active', 'text-blue-600', 'border-blue-500');
+                    button.classList.remove('text-gray-500', 'hover:text-blue-600', 'hover:border-blue-300');
+                    content.classList.remove('hidden');
+                });
+            }
+        });
 
-    // ★ チェックボックス変更時に削除ボタンを有効/無効化
-    resultsList.addEventListener('change', (event) => {
-        if (event.target.classList.contains('delete-checkbox')) {
-            const checkedBoxes = resultsList.querySelectorAll('input.delete-checkbox:checked');
-            deleteButton.disabled = checkedBoxes.length === 0;
-        }
-    });
+        // --- 相性診断機能 ---
+        const compatibilityForm = document.getElementById('compatibilityForm');
+        const person1Input = document.getElementById('person1-search');
+        const person1Suggestions = document.getElementById('person1-suggestions');
+        const person1Hidden = document.getElementById('person1-resultId');
+        const person2Input = document.getElementById('person2-search');
+        const person2Suggestions = document.getElementById('person2-suggestions');
+        const person2Hidden = document.getElementById('person2-resultId');
+        const filterInput = document.getElementById('compatibility-filter-search');
+        const filterSuggestions = document.getElementById('compatibility-filter-suggestions');
+        const filterHidden = document.getElementById('compatibility-filter-resultId');
+        const resultsListDiv = document.getElementById('compatibilityResultsList');
+        const messageArea = document.getElementById('compatibility-message-area');
+        const loadingOverlayComp = document.getElementById('loading-overlay'); // ローディング用
 
-    // ★ 「選択した結果を削除」ボタンクリック
-    deleteButton.addEventListener('click', () => {
-        const checkedBoxes = resultsList.querySelectorAll('input.delete-checkbox:checked');
-        idsToDelete = Array.from(checkedBoxes).map(cb => cb.value);
+        // ★★★ 新しい候補リスト表示関数 ★★★
+        const renderSuggestions = (inputElement, suggestionsDiv, hiddenElement, searchTerm, excludeResultId = null) => {
+            suggestionsDiv.innerHTML = '';
+            suggestionsDiv.classList.add('hidden');
+            const lowerSearchTerm = searchTerm.toLowerCase();
 
-        if (idsToDelete.length === 0) {
-            showToast('削除する結果を選択してください。', 'error');
-            return;
-        }
-
-        initialDeleteMessage.textContent = `${idsToDelete.length}件の結果を削除します。よろしいですか？`;
-        initialDeleteConfirmModal.classList.remove('hidden');
-    });
-
-    // ★ 初期確認モーダル：キャンセルボタン
-    cancelInitialDeleteButton.addEventListener('click', () => {
-        initialDeleteConfirmModal.classList.add('hidden');
-        idsToDelete = [];
-    });
-
-    // ★ 初期確認モーダル：OKボタン
-    confirmInitialDeleteButton.addEventListener('click', () => {
-        initialDeleteConfirmModal.classList.add('hidden');
-        deleteConfirmInput.value = '';
-        finalDeleteButton.disabled = true;
-        deleteConfirmModal.classList.remove('hidden');
-    });
-
-    // 最終確認モーダル：キャンセルボタン
-    cancelDeleteButton.addEventListener('click', () => {
-        deleteConfirmModal.classList.add('hidden');
-        idsToDelete = [];
-    });
-
-    // 最終確認モーダル：入力チェック
-    deleteConfirmInput.addEventListener('input', () => {
-        finalDeleteButton.disabled = deleteConfirmInput.value !== '削除';
-    });
-
-    // 最終確認モーダル：削除実行ボタン
-    finalDeleteButton.addEventListener('click', async () => {
-        if (deleteConfirmInput.value !== '削除' || idsToDelete.length === 0) {
-            return;
-        }
-
-        finalDeleteButton.disabled = true;
-        finalDeleteButton.textContent = '削除中...';
-
-        try {
-            const currentPageId = document.querySelector('input[name="pageId"]').value;
-            const response = await fetch('/api/results/delete', { // ★ エンドポイント注意
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    pageId: currentPageId,
-                    resultIds: idsToDelete
-                }),
+            const filtered = window.analysisResultsList.filter(person => {
+                if (person.resultId === excludeResultId) return false; // 排他
+                if (!searchTerm) return true; // 空なら全て (排他後)
+                return person.name.toLowerCase().includes(lowerSearchTerm);
             });
 
-            const result = await response.json();
+            if (filtered.length > 0) {
+                filtered.forEach(person => {
+                    const item = document.createElement('div');
+                    item.className = 'px-4 py-2 hover:bg-gray-100 cursor-pointer';
+                    item.textContent = `${person.registrationNumber || '未'}: ${person.name}`;
+                    item.dataset.resultId = person.resultId;
+                    item.dataset.name = person.name;
 
-            if (response.ok) {
-                showToast(result.message || '削除しました。', 'success');
-                setTimeout(() => { location.reload(); }, 1000);
+                    item.addEventListener('mousedown', (e) => { // clickだとblurが先に発火することがあるためmousedown
+                        // ★ 入力フィールドに表示するテキストを「No: 名前」形式にする
+                        const displayText = `${person.registrationNumber || '未'}: ${person.name}`;
+                        inputElement.value = displayText;
+                        hiddenElement.value = person.resultId;
+                        // 相互排他処理 & リスト閉じ処理
+                        if (inputElement === person1Input) {
+                            renderSuggestions(person2Input, person2Suggestions, person2Hidden, person2Input.value, person.resultId);
+                            person1Suggestions.classList.add('hidden'); // 自分自身を閉じる
+                            person2Suggestions.classList.add('hidden'); // もう片方も閉じる
+                        } else if (inputElement === person2Input) {
+                            renderSuggestions(person1Input, person1Suggestions, person1Hidden, person1Input.value, person.resultId);
+                            person1Suggestions.classList.add('hidden'); // もう片方も閉じる
+                            person2Suggestions.classList.add('hidden'); // 自分自身を閉じる
+                        }
+                        // 絞り込み結果を更新
+                        if (inputElement === filterInput) {
+                            renderCompatibilityResults(person.resultId);
+                            suggestionsDiv.classList.add('hidden'); // 絞り込み選択後も閉じる
+                        }
+                    });
+                    suggestionsDiv.appendChild(item);
+                });
+                suggestionsDiv.classList.remove('hidden');
             } else {
-                showToast(result.error || '削除に失敗しました。', 'error');
-                finalDeleteButton.disabled = false;
-                finalDeleteButton.textContent = '削除実行';
+                 // 候補がない場合の表示 (任意)
+                 // const noResult = document.createElement('div');
+                 // noResult.className = 'px-4 py-2 text-gray-500';
+                 // noResult.textContent = '該当者なし';
+                 // suggestionsDiv.appendChild(noResult);
+                 // suggestionsDiv.classList.remove('hidden');
             }
-        } catch (error) {
-            console.error('Delete error:', error);
-            showToast('削除中にエラーが発生しました。', 'error');
-            finalDeleteButton.disabled = false;
-            finalDeleteButton.textContent = '削除実行';
-        } finally {
-            deleteConfirmModal.classList.add('hidden');
-        }
-    });
+        };
 
+        // 結果一覧テーブルを生成する関数
+        const renderCompatibilityResults = (filterResultId = 'all') => {
+            resultsListDiv.innerHTML = ''; // クリア
+            const filteredResults = filterResultId === 'all'
+                ? window.compatibilityResultsList
+                : window.compatibilityResultsList.filter(result =>
+                    result.person1.resultId === filterResultId || result.person2.resultId === filterResultId
+                  );
+
+            if (filteredResults.length === 0) {
+                resultsListDiv.innerHTML = '<p class="text-center text-gray-500 py-4">表示対象の診断結果はありません。</p>';
+                return;
+            }
+
+            // ★★★ テーブルではなくリスト形式で表示 ★★★
+            const listContainer = document.createElement('div');
+            listContainer.className = 'space-y-2'; // 各リスト項目の間隔
+
+            filteredResults.forEach(result => {
+                const listItem = document.createElement('div');
+                listItem.className = 'border border-gray-200 rounded-md p-3 hover:bg-gray-50 transition duration-150 ease-in-out flex items-center space-x-3';
+
+                // ★ チェックボックスを追加
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = result.compatibilityId;
+                checkbox.className = 'compatibility-delete-checkbox h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded';
+                listItem.appendChild(checkbox);
+
+                const link = document.createElement('a');
+                const detailUrl = `/c/${window.currentPageId}/compatibility/${result.compatibilityId}`;
+                link.href = detailUrl;
+                link.target = '_blank'; // 新しいタブで開く
+                link.className = 'flex justify-between items-center';
+
+                const textSpan = document.createElement('span');
+                // ★ 表示形式を「No: 名前 × No: 名前」に変更
+                const textContent = `
+                  ${result.person1.registrationNumber || '未'}: ${result.person1.familyName || ''} ${result.person1.firstName || ''}
+                  ×
+                  ${result.person2.registrationNumber || '未'}: ${result.person2.familyName || ''} ${result.person2.firstName || ''}
+                `;
+                textSpan.textContent = textContent.replace(/\s+/g, ' ').trim(); // 余分な空白を整理
+                textSpan.className = 'font-medium text-gray-800';
+
+                const dateSpan = document.createElement('span');
+                dateSpan.textContent = new Date(result.createdAt).toLocaleString('ja-JP');
+                dateSpan.className = 'text-sm text-gray-500';
+
+                link.appendChild(textSpan);
+                link.appendChild(dateSpan);
+                listItem.appendChild(link);
+                listContainer.appendChild(listItem);
+            });
+
+            resultsListDiv.appendChild(listContainer);
+        };
+
+        // 初期化: 結果表示 (プルダウン生成は不要に)
+        if(window.compatibilityResultsList && resultsListDiv) {
+            renderCompatibilityResults(); // 初回は 'all' で表示
+        }
+
+        // ★★★ 新しいイベントリスナー群 ★★★
+        [person1Input, person2Input, filterInput].forEach((input, index) => {
+            if (!input) return;
+            const suggestionsDiv = [person1Suggestions, person2Suggestions, filterSuggestions][index];
+            const hiddenElement = [person1Hidden, person2Hidden, filterHidden][index];
+            const otherInput = (input === person1Input) ? person2Input : ((input === person2Input) ? person1Input : null);
+            const otherHidden = (input === person1Input) ? person2Hidden : ((input === person2Input) ? person1Hidden : null);
+
+            // 入力イベント
+            input.addEventListener('input', (e) => {
+                const searchTerm = e.target.value;
+                const excludeId = otherHidden?.value || null;
+                hiddenElement.value = ''; // 入力中は選択解除
+                renderSuggestions(input, suggestionsDiv, hiddenElement, searchTerm, excludeId);
+                // 絞り込み入力の場合は、入力中は全結果表示に戻す
+                if(input === filterInput) {
+                     renderCompatibilityResults('all');
+                }
+            });
+
+            // フォーカス時イベント
+            input.addEventListener('focus', (e) => {
+                const searchTerm = e.target.value;
+                const excludeId = otherHidden?.value || null;
+                // ★ フォーカス時は常に候補を再描画し、表示を試みる
+                renderSuggestions(input, suggestionsDiv, hiddenElement, searchTerm, excludeId);
+                if (suggestionsDiv.childElementCount > 0) {
+                    suggestionsDiv.classList.remove('hidden');
+                }
+            });
+
+            // フォーカス外れイベント (少し遅延させる)
+            input.addEventListener('blur', () => {
+                setTimeout(() => {
+                    suggestionsDiv.classList.add('hidden');
+                }, 150); // 候補クリックの猶予時間
+            });
+            // 初期値クリア（リロード対策）
+            hiddenElement.value = '';
+        });
+
+        // 相性診断フォーム送信処理
+        compatibilityForm?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            messageArea.textContent = '';
+            messageArea.className = 'mt-4 text-center';
+            loadingOverlayComp.classList.remove('hidden');
+            const submitBtn = compatibilityForm.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+
+            const formData = new FormData(compatibilityForm);
+            const resultId1 = person1Hidden.value;
+            const resultId2 = person2Hidden.value;
+
+            if (!resultId1 || !resultId2) {
+                messageArea.textContent = '診断対象1と診断対象2の両方を選択してください。';
+                messageArea.classList.add('error-message');
+                loadingOverlayComp.classList.add('hidden');
+                submitBtn.disabled = false;
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/compatibility/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        pageId: window.currentPageId, // 埋め込んだ pageId を使用
+                        resultId1: resultId1,
+                        resultId2: resultId2,
+                    }),
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    showToast(result.message || '相性診断が完了しました。', 'success');
+                    // 結果リストを更新 (新しい結果を先頭に追加)
+                    window.compatibilityResultsList.unshift(result.result);
+                    // リストを再描画
+                    renderCompatibilityResults(filterInput.value);
+                    // フォームリセット (任意)
+                    // compatibilityForm.reset();
+                    // populateSelect(person1Select);
+                    // populateSelect(person2Select);
+                } else {
+                    showToast(result.error || '相性診断中にエラーが発生しました。', 'error');
+                    messageArea.textContent = result.error || '相性診断中にエラーが発生しました。';
+                    messageArea.classList.add('error-message');
+                }
+            } catch (error) {
+                console.error('Compatibility submission error:', error);
+                showToast('通信エラーが発生しました。', 'error');
+                messageArea.textContent = '通信エラーが発生しました。';
+                messageArea.classList.add('error-message');
+            } finally {
+                loadingOverlayComp.classList.add('hidden');
+                submitBtn.disabled = false;
+            }
+        });
+
+        // --- ★★★ 通常分析フォームの送信処理リスナー ★★★ ---
+        const analysisForm = document.getElementById('analysisForm');
+        analysisForm?.addEventListener('submit', (event) => {
+            // 既存の submitForm 関数を呼び出す
+            submitForm(event);
+        });
+        // --- ここまで追加 ---
+
+        // --- ★★★ 相性診断結果 削除関連 ★★★ ---
+        const compatibilityResultsListDiv = document.getElementById('compatibilityResultsList');
+        const deleteCompatibilityButton = document.getElementById('deleteCompatibilityButton');
+        const initialCompDeleteModal = document.getElementById('initial-compatibility-delete-confirm-modal');
+        const initialCompDeleteMessage = document.getElementById('initial-compatibility-delete-message');
+        const cancelInitialCompDeleteButton = document.getElementById('cancel-initial-compatibility-delete-button');
+        const confirmInitialCompDeleteButton = document.getElementById('confirm-initial-compatibility-delete-button');
+        const finalCompDeleteModal = document.getElementById('compatibility-delete-confirm-modal');
+        const cancelFinalCompDeleteButton = document.getElementById('cancel-compatibility-delete-button');
+        const finalCompDeleteButton = document.getElementById('final-compatibility-delete-button');
+        const finalCompDeleteInput = document.getElementById('compatibility-delete-confirm-input');
+        let compatibilityIdsToDelete = [];
+
+        // チェックボックス変更 -> 削除ボタン有効/無効
+        compatibilityResultsListDiv.addEventListener('change', (event) => {
+            if (event.target.classList.contains('compatibility-delete-checkbox')) {
+                const checkedBoxes = compatibilityResultsListDiv.querySelectorAll('.compatibility-delete-checkbox:checked');
+                deleteCompatibilityButton.disabled = checkedBoxes.length === 0;
+            }
+        });
+
+        // 削除ボタンクリック -> 初期確認モーダル表示
+        deleteCompatibilityButton?.addEventListener('click', () => {
+            const checkedBoxes = compatibilityResultsListDiv.querySelectorAll('.compatibility-delete-checkbox:checked');
+            compatibilityIdsToDelete = Array.from(checkedBoxes).map(cb => cb.value);
+            if (compatibilityIdsToDelete.length === 0) {
+                showToast('削除する結果を選択してください。', 'error');
+                return;
+            }
+            initialCompDeleteMessage.textContent = `${compatibilityIdsToDelete.length}件の相性診断結果を削除します。よろしいですか？`;
+            initialCompDeleteModal?.classList.remove('hidden');
+        });
+
+        // 初期確認モーダル: キャンセル
+        cancelInitialCompDeleteButton?.addEventListener('click', () => {
+            initialCompDeleteModal?.classList.add('hidden');
+            compatibilityIdsToDelete = [];
+        });
+
+        // 初期確認モーダル: OK -> 最終確認モーダル表示
+        confirmInitialCompDeleteButton?.addEventListener('click', () => {
+            initialCompDeleteModal?.classList.add('hidden');
+            finalCompDeleteInput.value = '';
+            finalCompDeleteButton.disabled = true;
+            finalCompDeleteModal?.classList.remove('hidden');
+        });
+
+        // 最終確認モーダル: キャンセル
+        cancelFinalCompDeleteButton?.addEventListener('click', () => {
+            finalCompDeleteModal?.classList.add('hidden');
+            compatibilityIdsToDelete = [];
+        });
+
+        // 最終確認モーダル: 入力チェック
+        finalCompDeleteInput?.addEventListener('input', () => {
+            finalCompDeleteButton.disabled = finalCompDeleteInput.value !== '削除';
+        });
+
+        // 最終確認モーダル: 削除実行
+        finalCompDeleteButton?.addEventListener('click', async () => {
+            if (finalCompDeleteInput.value !== '削除' || compatibilityIdsToDelete.length === 0) {
+                return;
+            }
+            finalCompDeleteButton.disabled = true;
+            finalCompDeleteButton.textContent = '削除中...';
+            const loadingOverlay = document.getElementById('loading-overlay');
+            loadingOverlay.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/compatibility/bulk-delete', { // ★ 新しいAPIエンドポイント
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pageId: window.currentPageId,
+                        compatibilityIds: compatibilityIdsToDelete
+                    })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showToast(result.message || '削除しました。', 'success');
+                    // 削除成功したらリストを更新 (グローバル変数から削除して再描画)
+                    window.compatibilityResultsList = window.compatibilityResultsList.filter(
+                        res => !compatibilityIdsToDelete.includes(res.compatibilityId)
+                    );
+                    renderCompatibilityResults(filterInput.value ? filterHidden.value : 'all'); // 現在の絞り込み条件で再描画
+                    deleteCompatibilityButton.disabled = true; // 削除ボタンを無効化
+                } else {
+                    showToast(result.error || '削除に失敗しました。', 'error');
+                    finalCompDeleteButton.disabled = false;
+                }
+            } catch (error) {
+                console.error('Compatibility delete error:', error);
+                showToast('削除中にエラーが発生しました。', 'error');
+                finalCompDeleteButton.disabled = false;
+            } finally {
+                finalCompDeleteButton.textContent = '削除実行';
+                finalCompDeleteModal?.classList.add('hidden');
+                loadingOverlay.classList.add('hidden');
+                compatibilityIdsToDelete = [];
+            }
+        });
+
+        // --- ここまで相性診断結果 削除関連 ---
+
+    });
   </script>
 
   <!-- ★★★ ここに追加: タブ切り替え用スクリプト ★★★ -->

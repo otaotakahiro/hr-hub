@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>相性診断結果</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link href="/styles/main.css" rel="stylesheet">
+    <style>
+        body { background-color: #f9fafb; padding: 2rem; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { font-size: 1.875rem; font-weight: bold; margin-bottom: 1rem; color: #1f2937; }
+        h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; color: #1f2937; }
+        h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #111827; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.5rem; }
+        p { color: #4b5563; line-height: 1.7; white-space: pre-wrap; /* 改行を反映 */ }
+        .info-box { background-color: #f3f4f6; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; }
+        .info-box span { font-weight: 600; margin-right: 0.5rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-6">相性診断結果</h1>
+
+        <div class="info-box text-center">
+            <span>対象者:</span> __PERSON1_NAME__ × __PERSON2_NAME__ <br>
+            <span>診断日時:</span> __CREATED_AT__
+        </div>
+
+        <div>
+            <h3><i class="fas fa-handshake mr-2"></i>仕事における1対1の相性</h3>
+            <p id="workCompatibility">__ANALYSIS_WORK_COMPATIBILITY__</p>
+
+            <h3><i class="fas fa-balance-scale mr-2"></i>良い点・悪い点</h3>
+            <p id="prosCons">__ANALYSIS_PROS_CONS__</p>
+
+            <h3><i class="fas fa-chart-line mr-2"></i>パフォーマンス向上策</h3>
+            <p id="performanceBoost">__ANALYSIS_PERFORMANCE_BOOST__</p>
+        </div>
+
+        <div class="text-center mt-8">
+            <button onclick="window.close();" class="btn bg-gray-500 hover:bg-gray-600 text-white">閉じる</button>
+        </div>
+    </div>
+</body>
+</html>

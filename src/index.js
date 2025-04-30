@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/cloudflare-workers';
-import resultsRoute from './routes/results.route';
+import resultsRoute from './routes/results.route.js';
 // import companyRoute from './routes/company.route.js'; // 不要になったのでコメントアウトまたは削除
 import adminRoute from './routes/admin.route.js'; // 追加
 import clientRoute from './routes/client.route.js'; // 追加
+import compatibilityRoute from './routes/compatibility.route.js'; // ★ 追加
 
 const app = new Hono();
 
@@ -20,6 +21,7 @@ app.route('/admin', adminRoute(app));
 app.route('/c', clientRoute(app));
 
 // 既存のAPIルート
+app.route('/api/compatibility', compatibilityRoute(app));
 app.route('/api/results', resultsRoute(app));
 
 // 新しい会社専用ルートを追加 (前回実装分、不要なら削除)

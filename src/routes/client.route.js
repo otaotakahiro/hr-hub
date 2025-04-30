@@ -30,33 +30,79 @@ const clientRoute = (app) => {
       const listResult = await c.env.KV.list({ prefix: `result:${pageId}:` });
       const resultKeys = listResult.keys;
 
+      // ★★★ 追加: 分析結果データと相性診断結果データを取得 ★★★
+      let analysisResultsForJs = []; // JSでプルダウン等に使用するリスト
+      let compatibilityResults = []; // JSで一覧表示に使用するリスト
+      const fetchPromises = [];
+
+      // 分析結果 (`result:*`) の取得プロミスを追加
+      resultKeys.forEach(key => {
+        fetchPromises.push(
+          c.env.KV.get(key.name).then(resString => {
+            if (!resString) return null;
+            try {
+              const data = JSON.parse(resString);
+              // JS用に名前とIDのリストを作成
+              analysisResultsForJs.push({
+                resultId: data.resultId,
+                name: `${data.inputs?.familyName || ''} ${data.inputs?.firstName || ''}`.trim(),
+                registrationNumber: data.registrationNumber ?? null,
+              });
+              return data; // テーブル表示用のデータも返す
+            } catch (e) {
+              console.error(`Failed to parse result data for key ${key.name}:`, e);
+              return null;
+            }
+          })
+        );
+      });
+
+      // 相性診断結果 (`compatibility:*`) の取得プロミスを追加
+      const listCompatibilityResult = await c.env.KV.list({ prefix: `compatibility:${pageId}:` });
+      listCompatibilityResult.keys.forEach(key => {
+        fetchPromises.push(
+          c.env.KV.get(key.name).then(resString => {
+            if (!resString) return null;
+            try {
+              compatibilityResults.push(JSON.parse(resString));
+              return null; // こちらは analysisResultsForJs には追加しない
+            } catch (e) {
+              console.error(`Failed to parse compatibility data for key ${key.name}:`, e);
+              return null;
+            }
+          })
+        );
+      });
+
+      // 全てのデータ取得を並列実行
+      const allFetchedData = (await Promise.all(fetchPromises)).filter(data => data !== null);
+      // allFetchedData には 分析結果のデータのみが含まれる (相性診断結果は compatibilityResults に直接 push されるため)
+
+      // 分析結果一覧テーブル用のデータ準備 (resultsData)
+      let resultsData = allFetchedData; // 分析結果のみ
+      resultsData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      // JS用の分析結果リストを名前でソート
+      analysisResultsForJs.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+      // JS用の相性診断結果リストを作成日時でソート (新しい順)
+      compatibilityResults.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      // ★★★ ここまでデータ取得追加 ★★★
+
       let resultsHtml = '<p>分析結果はまだありません。</p>'; // デフォルトメッセージ
 
-      if (resultKeys && resultKeys.length > 0) {
-        // 3. 各キーに対応する結果データを取得
-        const resultsDataPromises = resultKeys.map(async (key) => {
-          const resultString = await c.env.KV.get(key.name);
-          if (!resultString) return null;
-          try {
-            return JSON.parse(resultString);
-          } catch (e) {
-            console.error(`Failed to parse result data for key ${key.name}:`, e);
-            return null;
-          }
-        });
-        let resultsData = (await Promise.all(resultsDataPromises)).filter(data => data !== null);
-
-        // ★ createdAt 降順 (新しい順) でソート
-        resultsData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
+      if (resultsData && resultsData.length > 0) {
         // 4. HTMLテーブル行を生成
         const tableRows = resultsData.map(resultData => {
             const input = resultData.inputs;
             const createdAt = new Date(resultData.createdAt).toLocaleString('ja-JP');
             // ★ 詳細ページへのリンクを修正
             const detailUrl = `/c/${pageId}/results/${resultData.resultId}`;
+            // ★ registrationNumber を取得 (存在しない場合は空文字)
+            const registrationNumberDisplay = resultData.registrationNumber ?? '';
             return `
               <tr>
+                <td class="border px-4 py-2 text-center">${registrationNumberDisplay}</td>
                 <td class="border px-4 py-2"><a href="${detailUrl}" class="text-blue-600 hover:underline" target="_blank">${input.familyName || ''} ${input.firstName || ''}</a></td>
                 <td class="border px-4 py-2">${input.birthdate || ''}</td>
                 <td class="border px-4 py-2">${input.gender === 'male' ? '男性' : input.gender === 'female' ? '女性' : ''}</td>
@@ -73,6 +119,7 @@ const clientRoute = (app) => {
             <table class="table-auto w-full">
               <thead>
                 <tr>
+                  <th class="px-4 py-2 text-center">登録No</th>
                   <th class="px-4 py-2">名前</th>
                   <th class="px-4 py-2">生年月日</th>
                   <th class="px-4 py-2">性別</th>
@@ -103,6 +150,18 @@ const clientRoute = (app) => {
       htmlContent = htmlContent.replace(/__CREATED_AT__/g, createdAtDate);
       htmlContent = htmlContent.replace(/__PAGE_ID__/g, pageId);
       htmlContent = htmlContent.replace(/<div id="resultsList">.*?<\/div>/s, `<div id="resultsList">${resultsHtml}</div>`);
+
+      // ★★★ 追加: 取得したデータをJSONとしてHTMLに埋め込む ★★★
+      const scriptDataInjection = `
+        <script>
+          window.analysisResultsList = ${JSON.stringify(analysisResultsForJs)};
+          window.compatibilityResultsList = ${JSON.stringify(compatibilityResults)};
+          window.currentPageId = "${pageId}"; // API呼び出し用に pageId も渡す
+        </script>
+      `;
+      // </body> の直前に挿入
+      htmlContent = htmlContent.replace('</body>', `${scriptDataInjection}</body>`);
+      // ★★★ ここまでデータ埋め込み追加 ★★★
 
       // 7. 置換後のHTMLを返す
       return c.html(htmlContent);
@@ -165,6 +224,74 @@ const clientRoute = (app) => {
     }
   });
   // --- ★★★ ここまで修正 ★★★ ---
+
+  // ★★★ 追加: 相性診断詳細ページルート ★★★
+  app.get('/:pageId{[a-zA-Z0-9_-]{12}}/compatibility/:compatibilityId{[0-9a-fA-F-]+}', async (c) => {
+    const { pageId, compatibilityId } = c.req.param();
+    const kvKey = `compatibility:${pageId}:${compatibilityId}`;
+
+    try {
+      console.log(`Fetching compatibility result from KV with key: ${kvKey}`);
+      const compatibilityString = await c.env.KV.get(kvKey);
+
+      if (!compatibilityString) {
+        console.log('Compatibility result not found in KV');
+        return c.notFound();
+      }
+      const compatibilityData = JSON.parse(compatibilityString);
+
+      // ★ 詳細表示用のHTMLテンプレートを取得 (新規作成するファイル名)
+      const templateResponse = await c.env.ASSETS.fetch(new Request(new URL('/compatibility_detail.html', c.req.url)));
+      if (!templateResponse.ok) {
+        console.error('Failed to fetch compatibility_detail.html', templateResponse.status);
+        return c.text('Failed to load page template.', 500);
+      }
+      let htmlContent = await templateResponse.text();
+
+      // ★ プレースホルダを実際のデータで置換 (テンプレートに合わせて調整が必要)
+      htmlContent = htmlContent.replace(/__PERSON1_NAME__/g, `${compatibilityData.person1.familyName || ''} ${compatibilityData.person1.firstName || ''}`);
+      htmlContent = htmlContent.replace(/__PERSON2_NAME__/g, `${compatibilityData.person2.familyName || ''} ${compatibilityData.person2.firstName || ''}`);
+      htmlContent = htmlContent.replace(/__CREATED_AT__/g, new Date(compatibilityData.createdAt).toLocaleString('ja-JP'));
+      htmlContent = htmlContent.replace(/__ANALYSIS_WORK_COMPATIBILITY__/g, compatibilityData.analysis?.workCompatibility || '分析結果なし');
+
+      // ★ prosCons を整形して置換
+      let prosConsHtml = '分析結果なし';
+      const prosConsData = compatibilityData.analysis?.prosCons;
+      if (typeof prosConsData === 'object' && prosConsData !== null) {
+          const goodPoints = prosConsData['良い点'] || [];
+          const badPoints = prosConsData['悪い点'] || [];
+          prosConsHtml = ''; // デフォルトをクリア
+          if (goodPoints.length > 0) {
+              prosConsHtml += '<b>良い点:</b>\n'; // 見出し
+              prosConsHtml += goodPoints.map(point => `- ${point}`).join('\n'); // 箇条書き
+              prosConsHtml += '\n\n'; // 改行
+          }
+          if (badPoints.length > 0) {
+              prosConsHtml += '<b>悪い点:</b>\n'; // 見出し
+              prosConsHtml += badPoints.map(point => `- ${point}`).join('\n'); // 箇条書き
+          }
+          if (prosConsHtml === '') { // 両方空だった場合
+               prosConsHtml = '特に目立った良い点・悪い点はありませんでした。';
+          }
+      } else if (typeof prosConsData === 'string') { // 文字列の場合も考慮(旧データなど)
+          prosConsHtml = prosConsData;
+      }
+      htmlContent = htmlContent.replace(/__ANALYSIS_PROS_CONS__/g, prosConsHtml);
+
+      htmlContent = htmlContent.replace(/__ANALYSIS_PERFORMANCE_BOOST__/g, compatibilityData.analysis?.performanceBoost || '分析結果なし');
+      // 必要に応じて他のプレースホルダも追加・置換
+
+      return c.html(htmlContent);
+
+    } catch (error) {
+      console.error(`Error fetching/processing compatibility result ${compatibilityId} for page ${pageId}:`, error);
+      if (error instanceof SyntaxError) {
+        return c.text('Failed to parse compatibility data.', 500);
+      }
+      return c.text('Internal Server Error', 500);
+    }
+  });
+  // ★★★ ここまで追加 ★★★
 
   // --- pageIdの形式が不正な場合 (オプション) ---
   // 上記の ':pageId{[a-zA-Z0-9_-]{12}}' で形式チェックしているので通常は不要だが、

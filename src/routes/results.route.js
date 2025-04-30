@@ -111,10 +111,18 @@ export default function (app) {
       // 1. この分析結果自体のユニークIDを生成 (resultId)
       const resultId = crypto.randomUUID();
 
+      // ★★★ 新規追加: registrationNumber の採番 ★★★
+      // 現在の会社IDに紐づく結果の数を取得して +1 する (簡易的なシーケンス)
+      const listResult = await context.env.KV.list({ prefix: `result:${pageId}:` });
+      const registrationNumber = listResult.keys.length + 1;
+      console.log(`Generated registration number: ${registrationNumber}`);
+      // ★★★ ここまで追加 ★★★
+
       // 2. 保存するデータを作成 (分析結果 + 入力データなど)
       const dataToStore = {
         resultId: resultId,
         pageId: pageId, // どの会社のデータか
+        registrationNumber: registrationNumber, // ★★★ 追加 ★★★
         inputs: { // 分析時の入力値も保存
           familyName: requestBody.familyName,
           firstName: requestBody.firstName,

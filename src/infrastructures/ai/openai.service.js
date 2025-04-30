@@ -3,6 +3,7 @@ import { SKILLS_PROMPT } from './prompts/skills-prompt.js';
 import { CAREER_PROMPT } from './prompts/career-prompt.js';
 import { FUTURE_PROMPT } from './prompts/future-prompt.js';
 import { PLUS_PROMPT } from './prompts/plus-prompt.js';
+import { COMPATIBILITY_PROMPT } from './prompts/compatibility-prompt.js';
 
 export class OpenaiService {
   constructor(apiKey, model = 'gpt-4.1-mini') {
@@ -352,6 +353,121 @@ export class OpenaiService {
       throw error;
     }
   }
+
+  // ★★★ 新しいメソッド: 相性診断 ★★★
+  /**
+   * 二人の人物データに基づいて相性を分析する
+   * @param {object} userData1 - 一人目の分析結果データ (analyzeAllの戻り値の .data 部分を想定)
+   * @param {object} userData2 - 二人目の分析結果データ (analyzeAllの戻り値の .data 部分を想定)
+   * @returns {Promise<object>} - 相性診断結果 (workCompatibility, prosCons, performanceBoost を含むオブジェクト)
+   */
+  async analyzeCompatibility(userData1, userData2) {
+    const start = Date.now();
+    const name1 = userData1?.analysis?.data?.userInfo?.name || '不明';
+    const name2 = userData2?.analysis?.data?.userInfo?.name || '不明';
+    console.log(`[Compatibility] Starting analysis between: ${name1} and ${name2}`);
+
+    // ★ ログ追加: 受け取った入力データの詳細を確認
+    console.log('[Compatibility] Input Data Details 1:', JSON.stringify(userData1?.analysis?.data, null, 2));
+    console.log('[Compatibility] Input Data Details 2:', JSON.stringify(userData2?.analysis?.data, null, 2));
+
+    // ★ ログ追加: 入力データの主要部分を確認 (これは残しても良い)
+    console.log(`[Compatibility] Input Data 1 (Name: ${name1}):`);
+    console.log(`  - Overview Exists: ${!!userData1?.analysis?.data?.overview?.overview}`);
+    console.log(`  - Skills Exists: ${!!userData1?.analysis?.data?.skills?.skills}`);
+    console.log(`  - Career Exists: ${!!userData1?.analysis?.data?.career?.career_path}`);
+    console.log(`[Compatibility] Input Data 2 (Name: ${name2}):`);
+    console.log(`  - Overview Exists: ${!!userData2?.analysis?.data?.overview?.overview}`);
+    console.log(`  - Skills Exists: ${!!userData2?.analysis?.data?.skills?.skills}`);
+    console.log(`  - Career Exists: ${!!userData2?.analysis?.data?.career?.career_path}`);
+
+    try {
+      const prompt = COMPATIBILITY_PROMPT
+        .replace('{{name1}}', name1)
+        .replace('{{gender1}}', userData1?.analysis?.data?.userInfo?.gender || '不明')
+        .replace('{{birthDate1}}', userData1?.analysis?.data?.userInfo?.birthDate || '不明')
+        // ★ オブジェクトをJSON文字列に変換して埋め込む
+        .replace('{{overview1}}', JSON.stringify(userData1?.analysis?.data?.overview?.overview, null, 2) || 'データなし')
+        .replace('{{skills1}}', JSON.stringify(userData1?.analysis?.data?.skills?.skills, null, 2) || 'データなし')
+        .replace('{{career1}}', JSON.stringify(userData1?.analysis?.data?.career?.career, null, 2) || 'データなし') // パスを修正
+        .replace('{{name2}}', name2)
+        .replace('{{gender2}}', userData2?.analysis?.data?.userInfo?.gender || '不明')
+        .replace('{{birthDate2}}', userData2?.analysis?.data?.userInfo?.birthDate || '不明')
+        // ★ オブジェクトをJSON文字列に変換して埋め込む
+        .replace('{{overview2}}', JSON.stringify(userData2?.analysis?.data?.overview?.overview, null, 2) || 'データなし')
+        .replace('{{skills2}}', JSON.stringify(userData2?.analysis?.data?.skills?.skills, null, 2) || 'データなし')
+        .replace('{{career2}}', JSON.stringify(userData2?.analysis?.data?.career?.career, null, 2) || 'データなし'); // パスを修正
+
+      // ★ ログ追加: 生成されたシステムプロンプトを確認 (長いため一部)
+      console.log(`[Compatibility] Generated System Prompt (First 500 chars):\n${prompt.substring(0, 500)}...`); // 少し長く表示
+
+      const messages = [
+        { role: 'system', content: prompt },
+        // ★ ユーザープロンプトを少し修正
+        { role: 'user', content: `提供された二人の分析対象者データに基づいて、${name1} と ${name2} の仕事上の相性を分析し、指定されたJSON形式で出力してください。` }
+      ];
+
+      // ★ ログ追加: OpenAIに送信するメッセージを確認 (userロールのみ)
+      console.log(`[Compatibility] Sending User Prompt to OpenAI: ${messages[1].content}`);
+
+      const requestBody = {
+        model: this.model,
+        messages: messages,
+        temperature: 0.5, // 創造性を少し抑えめに
+        response_format: { type: 'json_object' }, // JSONモードを指定
+      };
+
+      console.log('Sending compatibility analysis request to OpenAI...');
+      const response = await this.withTimeout(
+        fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify(requestBody),
+        }),
+        60000, // タイムアウトを60秒に延長
+        'OpenAI compatibility analysis timed out'
+      );
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`OpenAI API error: ${response.status} ${response.statusText}`, errorBody);
+        throw new Error(`OpenAI API request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const apiResponse = await response.json();
+      const content = apiResponse.choices?.[0]?.message?.content;
+
+      if (!content) {
+        console.error('No content received from OpenAI API.');
+        throw new Error('No content received from OpenAI API for compatibility analysis.');
+      }
+
+      const parsedResult = this.safeJsonParse(content);
+      if (parsedResult.error) {
+        console.error('Failed to parse JSON response from OpenAI:', parsedResult.error, parsedResult.preview);
+        throw new Error('Failed to parse JSON response from OpenAI.');
+      }
+
+      // 簡単なログ出力 (詳細は必要に応じて saveResponseLog のような関数を作る)
+      console.log('[Compatibility] OpenAI analysis successful.');
+      // ★ ログ追加: 解析結果を確認
+      console.log('[Compatibility] Parsed Result:', JSON.stringify(parsedResult, null, 2));
+
+      const end = Date.now();
+      console.log(`[Compatibility] Analysis completed in ${(end - start) / 1000} seconds`);
+
+      // workCompatibility, prosCons, performanceBoost を含むオブジェクトを返す
+      return parsedResult;
+
+    } catch (error) {
+      console.error('Error during compatibility analysis:', error);
+      throw error; // エラーを呼び出し元に伝える
+    }
+  }
+  // ★★★ ここまで追加 ★★★
 }
 
 export default OpenaiService;

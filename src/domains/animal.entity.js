@@ -387,9 +387,13 @@ export class AnimalEntity {
     const month = birthDate.getMonth() + 1;
     const day = birthDate.getDate();
 
-    const tempAnimalNumber = (AnimalEntity.numberTable[year][month - 1]);
+    console.log(`[DEBUG] getAnimalNumber called with year: ${year}`);
+    console.log(`[DEBUG] Accessing numberTable[${year}]:`, AnimalEntity.numberTable[year]);
 
-    if (!tempAnimalNumber) {
+    const tempAnimalNumber = (AnimalEntity.numberTable[year]?.[month - 1]);
+
+    if (tempAnimalNumber === undefined || tempAnimalNumber === null) {
+      console.error(`[DEBUG] tempAnimalNumber not found for year ${year}, month index ${month - 1}`);
       throw new Error('動物番号が見つかりません');
     }
 
@@ -397,6 +401,11 @@ export class AnimalEntity {
 
     if (animalNumber > 60) {
       return animalNumber - 60;
+    }
+
+    if (animalNumber <= 0) {
+      console.error(`[DEBUG] Calculated animalNumber is invalid: ${animalNumber}`);
+      throw new Error(`計算結果が不正です (${animalNumber})`);
     }
 
     return animalNumber;
