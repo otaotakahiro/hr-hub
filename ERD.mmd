@@ -1,0 +1,216 @@
+erDiagram
+    companies {
+        INT     id PK
+        VARCHAR name
+        VARCHAR address
+        INT     company_person_id
+        DATE    created_at
+    }
+
+    company_persons {
+        INT     id PK
+        VARCHAR name
+        VARCHAR email
+        VARCHAR phone_number
+        DATE    created_at
+    }
+
+    results {
+        INT     id PK
+        VARCHAR firstname
+        VARCHAR familyName
+        VARCHAR firstNameKana
+        VARCHAR familyNameKana
+        DATE    birthDate
+        INT     gender
+        INT     company_id FK
+    }
+
+    overview_strengths_results {
+        INT     id PK
+        VARCHAR strengths
+        INT     result_id FK
+    }
+
+    overview_weaknesses_results {
+        INT     id PK
+        VARCHAR weaknesses
+        INT     result_id FK
+    }
+
+    overview_compatibility_type_results {
+        INT     id PK
+        VARCHAR title
+        TEXT    description
+        VARCHAR note
+        INT     result_id FK
+    }
+
+    overview_compatibility_type_tags {
+        INT     id PK
+        INT     tags
+    }
+
+    overview_compatibility_type_tags_relation {
+        INT     id PK
+        INT     tags_id FK
+        INT     overview_compatibility_type_results_id FK
+    }
+
+    %%resultと1対1なのでresultに移す？井上くんに確認
+    overview_personality_results {
+        INT     id PK
+        TEXT    summary
+        VARCHAR behavior_type
+        TEXT    behavior_description
+        VARCHAR impression_type
+        TEXT    impression_description
+        TEXT    evaluation_summary
+        TEXT    evaluation_strengths
+        TEXT    evaluation_weaknesses
+        TEXT    evaluation_conclusion
+        INT     result_id FK
+
+    }
+%% 増える可能性がないとは言えない部分、これもresultに結合するかこのまま独立させるか拡張性を考えると独立か？
+    skills_evaluations_results {
+        INT      id PK
+        VARCHAR  name
+        INT      score
+        TEXT     description
+        INT      result_id FK
+    }
+
+%%コレ以上増えないと思うが増える可能性が懸念される部分
+    skills_interviewQuestions_results {
+        INT      id PK
+        TEXT     question
+        TEXT     purpose
+        INT      result_id FK
+
+    }
+
+    skills_warningSignals_results {
+        INT      id PK
+        TEXT     warningSignals_result
+        INT      result_id FK
+    }
+
+    career_aptitudeScores_results {
+        INT      id PK
+        VARCHAR  field
+        INT      score
+        INT      result_id FK
+    }
+
+    career_businessAreas_results {
+        INT      id PK
+        VARCHAR  name
+        VARCHAR  icon
+        TEXT     description
+        INT      result_id FK
+    }
+
+    career_businessAreas_tags_results {
+        INT      id PK
+        VARCHAR  tag
+    }
+
+    career_businessAreas_tags_relation {
+        INT     id PK
+        INT     career_businessAreas_tags_results FK
+        INT     career_businessAreas_results_id FK
+    }
+
+    career_successKeywords_results {
+        INT      id PK
+        VARCHAR  title
+        VARCHAR  icon
+        TEXT     description
+        INT      result_id FK
+    }
+
+    career_suitableFields_results {
+        INT      id PK
+        VARCHAR  name
+        VARCHAR  examples
+        TEXT     description
+        INT      result_id FK
+    }
+
+
+    future_timeline_results {
+        INT      id PK
+        TEXT     description
+        INT      result_id FK
+    }
+
+    future_timeline_periods_results {
+        INT      id PK
+        VARCHAR  period
+        INT      future_timeline_results_id FK
+    }
+
+    future_timeline_terms_results {
+        INT      id PK
+        VARCHAR  term
+        INT      future_timeline_results_id FK
+    }
+
+    future_timeline_phases_results {
+        INT      id PK
+        VARCHAR  phase
+        INT      future_timeline_results_id FK
+    }
+
+    future_careerProposals_results {
+        INT      id PK
+        TEXT     description
+        INT      result_id FK
+    }
+
+    future_careerProposals_actions_results {
+        INT      id PK
+        TEXT     description
+        INT      future_careerProposals_results FK
+    }
+
+
+
+
+    %% ここから下は後で使う ///
+    effective_communication_results {
+        INT     id PK
+        VARCHAR title
+        TEXT    content
+        INT     result_id   FK
+    }
+
+    %% ────────────── relations ──────────────
+    companies      }o--|| company_persons : contact
+    companies ||--o{ results : companies_has_results
+    results ||--|{ overview_strengths_results : results_has_overview_strengths_results
+    results ||--|{ overview_weaknesses_results : results_has_overview_weaknesses_results
+    results ||--|{ overview_compatibility_type_results : results_has_overview_compatibility_type_results
+    results ||--|| overview_personality_results : results_has_overview_personality_results
+    results ||--|{ skills_evaluations_results:results_has_skills_evaluations_results
+    results ||--|{ skills_interviewQuestions_results:results_has_skills_interviewQuestions_results
+    results ||--|{ skills_warningSignals_results:results_has_skills_warningSignals_results
+    results ||--|{ career_aptitudeScores_results:results_has_career_aptitudeScores_results
+    results ||--|{ career_businessAreas_results:results_has_career_businessAreas_results
+    results ||--|{ career_successKeywords_results:results_has_career_successKeywords_results
+    results ||--|{ career_suitableFields_results:results_has_career_suitableFields_results
+
+
+
+    career_businessAreas_results ||--|{ career_businessAreas_tags_relation:career_businessAreas_results_has_career_businessAreas_tags_relation
+    career_businessAreas_tags_relation }|--|| career_businessAreas_tags_results:career_businessAreas_tags_relation_has_career_businessAreas_tags_results
+
+    overview_compatibility_type_results ||--|{ overview_compatibility_type_tags_relation :overview_compatibility_type_results_has_overview_compatibility_type_tags_relation
+    overview_compatibility_type_tags_relation}|--|| overview_compatibility_type_tags:overview_compatibility_type_tags_relation_has_overview_compatibility_type_tags
+
+
+
+
+
+    results ||--|{ effective_communication_results: resules_has_effective_communication_results
